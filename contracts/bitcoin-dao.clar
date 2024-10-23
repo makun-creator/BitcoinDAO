@@ -1,3 +1,7 @@
+;; Bitcoin-Based DAO Contract
+;; Implements governance, voting, fund management, and investment tracking
+
+;; Error codes
 (define-constant ERR-NOT-AUTHORIZED (err u100))
 (define-constant ERR-ALREADY-VOTED (err u101))
 (define-constant ERR-PROPOSAL-EXPIRED (err u102))
@@ -6,12 +10,14 @@
 (define-constant ERR-PROPOSAL-NOT-ACTIVE (err u105))
 (define-constant ERR-QUORUM-NOT-REACHED (err u106))
 
+;; Data variables
 (define-data-var dao-admin principal tx-sender)
 (define-data-var minimum-quorum uint u500) ;; 50% in basis points
 (define-data-var voting-period uint u144) ;; ~1 day in blocks
 (define-data-var proposal-count uint u0)
 (define-data-var treasury-balance uint u0)
 
+;; Data maps
 (define-map members 
     principal 
     {
@@ -58,6 +64,9 @@
     }
 )
 
+;; Public functions
+
+;; Join DAO
 (define-public (join-dao)
     (let
         (
@@ -78,7 +87,7 @@
     )
 )
 
-
+;; Contribute funds
 (define-public (contribute-funds (amount uint))
     (let
         (
@@ -103,6 +112,7 @@
     )
 )
 
+;; Create proposal
 (define-public (create-proposal (title (string-ascii 100)) 
                               (description (string-utf8 1000))
                               (amount uint)
@@ -139,6 +149,7 @@
     )
 )
 
+;; Vote on proposal
 (define-public (vote (proposal-id uint) (support bool))
     (let
         (
@@ -172,6 +183,7 @@
     )
 )
 
+;; Execute proposal
 (define-public (execute-proposal (proposal-id uint))
     (let
         (
@@ -216,6 +228,8 @@
     )
 )
 
+;; Read-only functions
+
 (define-read-only (get-member-info (member principal))
     (map-get? members member)
 )
@@ -230,4 +244,9 @@
 
 (define-read-only (get-treasury-balance)
     (ok (var-get treasury-balance))
+)
+
+;; Internal functions
+(define-private (percentage-of (amount uint) (total uint))
+    (/ (* amount u100) total)
 )
