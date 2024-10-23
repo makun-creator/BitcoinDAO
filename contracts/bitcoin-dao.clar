@@ -129,12 +129,12 @@
 (define-public (add-emergency-admin (admin principal))
     (begin
         (asserts! (is-eq tx-sender (var-get dao-admin)) ERR-NOT-AUTHORIZED)
+        ;; Check that admin is not null and not the zero address
+        (asserts! (not (is-eq admin (as-contract tx-sender))) ERR-INVALID-PARAMETER)
         (map-set emergency-admins admin true)
         (ok true)
     )
 )
-
-;; Delegation System
 
 (define-public (delegate-votes (delegate-to principal) (amount uint) (expiry uint))
     (let
@@ -142,6 +142,9 @@
             (caller tx-sender)
             (member-info (unwrap! (get-member-info caller) ERR-NOT-AUTHORIZED))
         )
+        ;; Additional validation for delegate-to
+        (asserts! (not (is-eq delegate-to caller)) ERR-INVALID-DELEGATE)
+        (asserts! (is-some (get-member-info delegate-to)) ERR-INVALID-DELEGATE)
         (asserts! (>= (get voting-power member-info) amount) ERR-INSUFFICIENT-FUNDS)
         (asserts! (> expiry block-height) ERR-INVALID-PARAMETER)
         
@@ -154,33 +157,12 @@
             }
         )
         
-        ;; Update voting power
         (map-set members
             caller
             (merge member-info {
                 voting-power: (- (get voting-power member-info) amount)
             })
         )
-        (ok true)
-    )
-)
-
-(define-public (revoke-delegation)
-    (let
-        (
-            (caller tx-sender)
-            (delegation (unwrap! (get-delegation caller) ERR-NO-DELEGATE))
-            (member-info (unwrap! (get-member-info caller) ERR-NOT-AUTHORIZED))
-        )
-        ;; Return voting power
-        (map-set members
-            caller
-            (merge member-info {
-                voting-power: (+ (get voting-power member-info) (get amount delegation))
-            })
-        )
-        ;; Clear delegation
-        (map-delete delegations caller)
         (ok true)
     )
 )
@@ -198,6 +180,10 @@
             (params (var-get dao-parameters))
             (end-block (+ current-block (get voting-period params)))
         )
+        ;; Additional input validation
+        (asserts! (not (is-eq target (as-contract tx-sender))) ERR-INVALID-PARAMETER)
+        (asserts! (> (len title) u0) ERR-INVALID-PARAMETER)
+        (asserts! (> (len description) u0) ERR-INVALID-PARAMETER)
         (asserts! (is-some (get-member-info caller)) ERR-NOT-AUTHORIZED)
         (asserts! (>= (var-get treasury-balance) amount) ERR-INSUFFICIENT-FUNDS)
         (asserts! (>= amount (get min-proposal-amount params)) ERR-INVALID-AMOUNT)
@@ -227,90 +213,17 @@
     )
 )
 
-
-(define-public (vote (proposal-id uint) (support bool))
-    (let
-        (
-            (caller tx-sender)
-            (member-info (unwrap! (get-member-info caller) ERR-NOT-AUTHORIZED))
-            (proposal (unwrap! (get-proposal-by-id proposal-id) ERR-PROPOSAL-NOT-ACTIVE))
-            (voting-power (get voting-power member-info))
-        )
-        (asserts! (< block-height (get end-block proposal)) ERR-PROPOSAL-EXPIRED)
-        (asserts! (is-none (get-vote proposal-id caller)) ERR-ALREADY-VOTED)
-        
-        (map-set votes 
-            {proposal-id: proposal-id, voter: caller}
-            {amount: voting-power, support: support}
-        )
-        
-        (map-set proposals
-            proposal-id
-            (merge proposal {
-                yes-votes: (if support 
-                    (+ (get yes-votes proposal) voting-power)
-                    (get yes-votes proposal)),
-                no-votes: (if support 
-                    (get no-votes proposal)
-                    (+ (get no-votes proposal) voting-power))
-            })
-        )
-        (ok true)
-    )
-)
-
-(define-public (execute-proposal (proposal-id uint))
-    (let
-        (
-            (proposal (unwrap! (get-proposal-by-id proposal-id) ERR-PROPOSAL-NOT-ACTIVE))
-            (params (var-get dao-parameters))
-            (total-votes (+ (get yes-votes proposal) (get no-votes proposal)))
-            (quorum-reached (>= (* total-votes u1000) 
-                              (* (var-get treasury-balance) (get quorum-threshold params))))
-        )
-        (asserts! (>= block-height (get end-block proposal)) ERR-PROPOSAL-NOT-ACTIVE)
-        (asserts! (not (get executed proposal)) (err u108))
-        (asserts! quorum-reached ERR-QUORUM-NOT-REACHED)
-        
-        (if (> (get yes-votes proposal) (get no-votes proposal))
-            (begin
-                (try! (stx-transfer? (get amount proposal) 
-                                   (as-contract tx-sender)
-                                   (get target proposal)))
-                (var-set treasury-balance (- (var-get treasury-balance) (get amount proposal)))
-                (map-set proposals
-                    proposal-id
-                    (merge proposal {
-                        status: "executed",
-                        executed: true
-                    })
-                )
-                (ok true)
-            )
-            (begin
-                (map-set proposals
-                    proposal-id
-                    (merge proposal {
-                        status: "rejected",
-                        executed: true
-                    })
-                )
-                (ok true)
-            )
-        )
-    )
-)
-
-;; Investment Returns Management
-
 (define-public (create-return-pool (proposal-id uint) (total-amount uint))
     (let
         (
             (caller tx-sender)
             (proposal (unwrap! (get-proposal-by-id proposal-id) ERR-PROPOSAL-NOT-ACTIVE))
         )
+        ;; Additional validation
         (asserts! (is-eq caller (var-get dao-admin)) ERR-NOT-AUTHORIZED)
         (asserts! (> total-amount u0) ERR-INVALID-AMOUNT)
+        ;; Check if proposal exists and is executed
+        (asserts! (is-eq (get status proposal) "executed") ERR-PROPOSAL-NOT-ACTIVE)
         
         (map-set return-pools
             proposal-id
