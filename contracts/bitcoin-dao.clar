@@ -10,9 +10,6 @@
 (define-constant ERR-INVALID-AMOUNT (err u104))
 (define-constant ERR-PROPOSAL-NOT-ACTIVE (err u105))
 (define-constant ERR-QUORUM-NOT-REACHED (err u106))
-
-
-;; Additional Error codes
 (define-constant ERR-NO-DELEGATE (err u110))
 (define-constant ERR-INVALID-DELEGATE (err u111))
 (define-constant ERR-EMERGENCY-ACTIVE (err u112))
@@ -26,6 +23,31 @@
 (define-data-var voting-period uint u144) ;; ~1 day in blocks
 (define-data-var proposal-count uint u0)
 (define-data-var treasury-balance uint u0)
+(define-data-var emergency-state bool false)
+
+;; Governance Parameters
+(define-data-var dao-parameters
+    {
+        proposal-fee: uint,
+        min-proposal-amount: uint,
+        max-proposal-amount: uint,
+        voting-delay: uint,
+        voting-period: uint,
+        timelock-period: uint,
+        quorum-threshold: uint,
+        super-majority: uint
+    }
+    {
+        proposal-fee: u100000, ;; 0.1 STX
+        min-proposal-amount: u1000000, ;; 1 STX
+        max-proposal-amount: u1000000000, ;; 1000 STX
+        voting-delay: u100, ;; blocks before voting starts
+        voting-period: u144, ;; ~1 day in blocks
+        timelock-period: u72, ;; ~12 hours in blocks
+        quorum-threshold: u500, ;; 50% in basis points
+        super-majority: u667 ;; 66.7% in basis points
+    }
+)
 
 ;; Data Maps
 (define-map members 
@@ -86,107 +108,6 @@
     }
 )
 
-(define-map member-claims
-    {member: principal, pool-id: uint}
-    {
-        amount: uint,
-        claimed: bool
-    }
-)
-
-;; Public functions
-(define-public (join-dao)
-    (let
-        (
-            (caller tx-sender)
-            (current-block block-height)
-        )
-        (asserts! (is-none (get-member-info caller)) (err u107))
-        (map-set members 
-            caller
-            {
-                voting-power: u0,
-                joined-block: current-block,
-                total-contributed: u0,
-                last-withdrawal: current-block
-            }
-        )
-        (ok true)
-    )
-)
-
-(define-public (contribute-funds (amount uint))
-    (let
-        (
-            (caller tx-sender)
-            (member-info (unwrap! (get-member-info caller) ERR-NOT-AUTHORIZED))
-            (new-total (+ (get total-contributed member-info) amount))
-        )
-        (asserts! (> amount u0) ERR-INVALID-AMOUNT)
-        (try! (stx-transfer? amount caller (contract-caller)))
-        (map-set members 
-            caller
-            (merge member-info {
-                voting-power: (+ (get voting-power member-info) amount),
-                total-contributed: new-total
-            })
-        )
-        (var-set treasury-balance (+ (var-get treasury-balance) amount))
-        (ok true)
-    )
-)
-
-;; Governance Parameters
-(define-data-var dao-parameters
-    {
-        proposal-fee: uint,
-        min-proposal-amount: uint,
-        max-proposal-amount: uint,
-        voting-delay: uint,
-        voting-period: uint,
-        timelock-period: uint,
-        quorum-threshold: uint,
-        super-majority: uint
-    }
-    {
-        proposal-fee: u100000, ;; 0.1 STX
-        min-proposal-amount: u1000000, ;; 1 STX
-        max-proposal-amount: u1000000000, ;; 1000 STX
-        voting-delay: u100, ;; blocks before voting starts
-        voting-period: u144, ;; ~1 day in blocks
-        timelock-period: u72, ;; ~12 hours in blocks
-        quorum-threshold: u500, ;; 50% in basis points
-        super-majority: u667 ;; 66.7% in basis points
-    }
-)
-
-;; Emergency Control
-(define-data-var emergency-state bool false)
-(define-map emergency-admins principal bool)
-
-;; Delegation System
-(define-map delegations
-    principal
-    {
-        delegate: principal,
-        amount: uint,
-        expiry: uint
-    }
-)
-
-;; Investment Returns
-(define-map return-pools
-    uint  ;; proposal ID
-    {
-        total-amount: uint,
-        distributed-amount: uint,
-        distribution-start: uint,
-        distribution-end: uint,
-        claims: (list 200 principal)
-    }
-)
-
-;; Member claims
 (define-map member-claims
     {member: principal, pool-id: uint}
     {
