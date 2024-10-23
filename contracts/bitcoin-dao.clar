@@ -102,3 +102,39 @@
         (ok true)
     )
 )
+
+(define-public (create-proposal (title (string-ascii 100)) 
+                              (description (string-utf8 1000))
+                              (amount uint)
+                              (target principal))
+    (let
+        (
+            (caller tx-sender)
+            (current-block block-height)
+            (proposal-id (+ (var-get proposal-count) u1))
+            (end-block (+ current-block (var-get voting-period)))
+        )
+        (asserts! (is-some (get-member-info caller)) ERR-NOT-AUTHORIZED)
+        (asserts! (>= (var-get treasury-balance) amount) ERR-INSUFFICIENT-FUNDS)
+        
+        (map-set proposals 
+            proposal-id
+            {
+                id: proposal-id,
+                proposer: caller,
+                title: title,
+                description: description,
+                amount: amount,
+                target: target,
+                start-block: current-block,
+                end-block: end-block,
+                yes-votes: u0,
+                no-votes: u0,
+                status: "active",
+                executed: false
+            }
+        )
+        (var-set proposal-count proposal-id)
+        (ok proposal-id)
+    )
+)
