@@ -138,3 +138,36 @@
         (ok proposal-id)
     )
 )
+
+(define-public (vote (proposal-id uint) (support bool))
+    (let
+        (
+            (caller tx-sender)
+            (member-info (unwrap! (get-member-info caller) ERR-NOT-AUTHORIZED))
+            (proposal (unwrap! (get-proposal-by-id proposal-id) ERR-PROPOSAL-NOT-ACTIVE))
+            (voting-power (get voting-power member-info))
+        )
+        (asserts! (< block-height (get end-block proposal)) ERR-PROPOSAL-EXPIRED)
+        (asserts! (is-none (get-vote proposal-id caller)) ERR-ALREADY-VOTED)
+        
+        ;; Record vote
+        (map-set votes 
+            {proposal-id: proposal-id, voter: caller}
+            {amount: voting-power, support: support}
+        )
+        
+        ;; Update proposal vote counts
+        (map-set proposals
+            proposal-id
+            (merge proposal {
+                yes-votes: (if support 
+                    (+ (get yes-votes proposal) voting-power)
+                    (get yes-votes proposal)),
+                no-votes: (if support 
+                    (get no-votes proposal)
+                    (+ (get no-votes proposal) voting-power))
+            })
+        )
+        (ok true)
+    )
+)
