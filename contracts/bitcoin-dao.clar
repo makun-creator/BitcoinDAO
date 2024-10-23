@@ -215,3 +215,19 @@
         )
     )
 )
+
+(define-read-only (get-member-info (member principal))
+    (map-get? members member)
+)
+
+(define-read-only (get-proposal-by-id (proposal-id uint))
+    (map-get? proposals proposal-id)
+)
+
+(define-read-only (get-vote (proposal-id uint) (voter principal))
+    (map-get? votes {proposal-id: proposal-id, voter: voter})
+)
+
+(define-read-only (get-treasury-balance)
+    (ok (var-get treasury-balance))
+)
