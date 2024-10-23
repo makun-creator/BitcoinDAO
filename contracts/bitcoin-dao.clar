@@ -77,3 +77,28 @@
         (ok true)
     )
 )
+
+
+(define-public (contribute-funds (amount uint))
+    (let
+        (
+            (caller tx-sender)
+            (member-info (unwrap! (get-member-info caller) ERR-NOT-AUTHORIZED))
+            (new-total (+ (get total-contributed member-info) amount))
+        )
+        (asserts! (> amount u0) ERR-INVALID-AMOUNT)
+        ;; Transfer funds to contract
+        (try! (stx-transfer? amount caller (contract-caller)))
+        ;; Update member info
+        (map-set members 
+            caller
+            (merge member-info {
+                voting-power: (+ (get voting-power member-info) amount),
+                total-contributed: new-total
+            })
+        )
+        ;; Update treasury
+        (var-set treasury-balance (+ (var-get treasury-balance) amount))
+        (ok true)
+    )
+)
