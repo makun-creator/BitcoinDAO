@@ -171,3 +171,47 @@
         (ok true)
     )
 )
+
+(define-public (execute-proposal (proposal-id uint))
+    (let
+        (
+            (proposal (unwrap! (get-proposal-by-id proposal-id) ERR-PROPOSAL-NOT-ACTIVE))
+            (total-votes (+ (get yes-votes proposal) (get no-votes proposal)))
+            (quorum-reached (>= (* total-votes u1000) 
+                              (* (var-get treasury-balance) (var-get minimum-quorum))))
+        )
+        (asserts! (>= block-height (get end-block proposal)) ERR-PROPOSAL-NOT-ACTIVE)
+        (asserts! (not (get executed proposal)) (err u108))
+        (asserts! quorum-reached ERR-QUORUM-NOT-REACHED)
+        
+        (if (> (get yes-votes proposal) (get no-votes proposal))
+            (begin
+                ;; Execute the proposal
+                (try! (stx-transfer? (get amount proposal) 
+                                   (as-contract tx-sender)
+                                   (get target proposal)))
+                ;; Update treasury
+                (var-set treasury-balance (- (var-get treasury-balance) (get amount proposal)))
+                ;; Update proposal status
+                (map-set proposals
+                    proposal-id
+                    (merge proposal {
+                        status: "executed",
+                        executed: true
+                    })
+                )
+                (ok true)
+            )
+            (begin
+                (map-set proposals
+                    proposal-id
+                    (merge proposal {
+                        status: "rejected",
+                        executed: true
+                    })
+                )
+                (ok true)
+            )
+        )
+    )
+)
