@@ -58,3 +58,22 @@
     }
 )
 
+(define-public (join-dao)
+    (let
+        (
+            (caller tx-sender)
+            (current-block block-height)
+        )
+        (asserts! (is-none (get-member-info caller)) (err u107))
+        (map-set members 
+            caller
+            {
+                voting-power: u0,
+                joined-block: current-block,
+                total-contributed: u0,
+                last-withdrawal: current-block
+            }
+        )
+        (ok true)
+    )
+)
